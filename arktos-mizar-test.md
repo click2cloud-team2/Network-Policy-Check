@@ -1,7 +1,7 @@
 
 <h1>Kubernetes policy basic test</h1>
-<br>
 <b>1) Under namespaces- default access test</b>
+<br>
 Create pods in a namespace and try to access one pod service from another
 <pre>
 demo@centaurus:~/arktos$ cluster/kubectl.sh create ns policy-demo
