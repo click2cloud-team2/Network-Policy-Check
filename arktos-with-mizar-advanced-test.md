@@ -1,4 +1,143 @@
 
+<h1>Kubernetes policy basic test</h1>
+<br>
+<b>1) Under namespaces- default access test</b>
+Create pods in a namespace and try to access one pod service from another
+<pre>
+demo@centaurus:~/arktos$ cluster/kubectl.sh create ns policy-demo
+namespace/advanced-policy-demo created
+demo@centaurus:~/arktos$ cluster/kubectl.sh create deployment --namespace=policy-demo nginx --image=nginx
+deployment.apps/nginx created
+demo@centaurus:~/arktos$ cluster/kubectl.sh expose --namespace=policy-demo deployment nginx --port=80
+service/nginx exposed
+demo@centaurus:~/arktos$ cluster/kubectl.sh get svc -A
+NAMESPACE              NAME                 TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)                  AGE
+default                kubernetes           ClusterIP   10.0.0.1     <none>        443/TCP                  51m
+default                kubernetes-default   ClusterIP   10.0.0.121   <none>        443/TCP                  50m
+kube-system            kube-dns             ClusterIP   10.0.0.10    <none>        53/UDP,53/TCP            51m
+kube-system            kube-dns-default     ClusterIP   10.0.0.252   <none>        53/UDP,53/TCP,9153/TCP   50m  
+policy-demo            nginx                ClusterIP   10.0.0.150    <none>       80/TCP                   18s
+
+demo@centaurus:~/arktos$ cluster/kubectl.sh run --namespace=policy-demo access --rm -ti --image busybox /bin/sh
+kubectl run --generator=deployment/apps.v1 is DEPRECATED and will be removed in a future version. Use kubectl run --generator=run-pod/v1 or kubectl create instead.
+If you don't see a command prompt, try pressing enter.
+/ # wget -q --timeout=5 nginx -O -
+wget: bad address 'nginx'
+/ # wget -q 10.0.0.150:80 -O -
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+<style>
+html { color-scheme: light dark; }
+body { width: 35em; margin: 0 auto;
+font-family: Tahoma, Verdana, Arial, sans-serif; }
+</style>
+</head>
+<body>
+<h1>Welcome to nginx!</h1>
+<p>If you see this page, the nginx web server is successfully installed and
+working. Further configuration is required.</p>
+<p><em>Thank you for using nginx.</em></p>
+</body>
+</html>
+/ # 
+</pre>
+<pre>
+<b>Expected:</b> You should see a response from "nginx"
+<b>Findings:</b> By using clusterIP of nginx in "wget -q nginx -O -" we got response from "nginx"
+</pre>
+<b>2)Enable Isolation for the namespace</b>
+<pre>
+demo@centaurus:~/arktos$ cluster/kubectl.sh create -f - <<EOF
+> apiVersion: networking.k8s.io/v1
+> kind: NetworkPolicy
+> metadata:
+>   name: default-deny
+>   namespace: policy-demo
+> spec:
+>   podSelector:
+>     matchLabels: {}
+> EOF
+networkpolicy.networking.k8s.io/default-deny created
+demo@centaurus:~/arktos$ cluster/kubectl.sh run --namespace=policy-demo access --rm -ti --image busybox /bin/sh
+kubectl run --generator=deployment/apps.v1 is DEPRECATED and will be removed in a future version. Use kubectl run --generator=run-pod/v1 or kubectl create instead.
+If you don't see a command prompt, try pressing enter.
+/ # wget -q --timeout=5 nginx -O -
+wget: bad address 'nginx'
+/ # wget -q --timeout=5 10.0.0.150 -O -
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+<style>
+html { color-scheme: light dark; }
+body { width: 35em; margin: 0 auto;
+font-family: Tahoma, Verdana, Arial, sans-serif; }
+</style>
+</head>
+<body>
+<h1>Welcome to nginx!</h1>
+<p>If you see this page, the nginx web server is successfully installed and
+working. Further configuration is required.</p>
+<p><em>Thank you for using nginx.</em></p>
+</body>
+</html>
+</pre>
+<pre>
+<b>Expected:</b> You should see a "wget: download timed out" i.e., no response from "nginx"
+<b>Findings:</b> By using clusterIP of nginx in "wget -q nginx -O -" we got response from "nginx"
+</pre>
+
+<b>3)Enable access for "nginx"</b>
+<pre>
+demo@centaurus:~/arktos$ cluster/kubectl.sh create -f - <<EOF
+> apiVersion: networking.k8s.io/v1
+> kind: NetworkPolicy
+> metadata:
+>   name: access-nginx
+>   namespace: policy-demo
+> spec:
+>   podSelector:
+>     matchLabels:
+>       app: nginx
+>   ingress:
+>     - from:
+>       - podSelector:
+>           matchLabels:
+>             run: access
+> EOF
+networkpolicy.networking.k8s.io/access-nginx created
+demo@centaurus:~/arktos$ cluster/kubectl.sh run --namespace=policy-demo access --rm -ti --image busybox /bin/sh
+kubectl run --generator=deployment/apps.v1 is DEPRECATED and will be removed in a future version. Use kubectl run --generator=run-pod/v1 or kubectl create instead.
+If you don't see a command prompt, try pressing enter.
+/ # wget -q --timeout=5 nginx -O -
+wget: bad address 'nginx'
+/ # wget -q --timeout=5 10.0.0.150 -O -
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+<style>
+html { color-scheme: light dark; }
+body { width: 35em; margin: 0 auto;
+font-family: Tahoma, Verdana, Arial, sans-serif; }
+</style>
+</head>
+<body>
+<h1>Welcome to nginx!</h1>
+<p>If you see this page, the nginx web server is successfully installed and
+working. Further configuration is required.</p>
+<p><em>Thank you for using nginx.</em></p>
+</body>
+</html>
+</pre>
+<pre>
+<b>Expected :</b> You should see a response from "nginx"
+<b>Findings: </b>By using clusterIP of nginx in "wget -q nginx -O -" we got response from "nginx"
+</pre>
+<hr>
+
 <h1>Kubernetes policy advanced test</h1>
 
 <b>1) Ingress and egress default test</b>
@@ -334,3 +473,4 @@ for "google.com" we should get "wget: download timed out"
 For i) we got "wget: bad address 'nginx'"
 For ii) we got " wget: bad address 'google.com'"
 </pre>
+
